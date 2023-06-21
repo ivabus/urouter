@@ -25,12 +25,12 @@
 #[macro_use]
 extern crate rocket;
 
+use rocket::http::Status;
 use std::cell::OnceCell;
 use std::path::PathBuf;
 
-use rocket::http::Status;
 use rocket::response::content::RawText;
-use rocket::response::Redirect;
+use rocket::response::{Redirect, Responder};
 use serde::Deserialize;
 
 const INDEX_REDIRECT: &'static str = "https://ivabus.dev";
@@ -44,8 +44,15 @@ struct Alias {
 	is_url: Option<bool>,
 }
 
+#[derive(Responder)]
+enum Response {
+	Text(RawText<String>),
+	Redirect(Redirect),
+	Status(Status),
+}
+
 #[get("/<page>")]
-async fn get_page(page: String) -> Result<RawText<String>, Redirect> {
+async fn get_page(page: String) -> Response {
 	let mut decoded_page = String::new();
 	url_escape::decode_to_string(page, &mut decoded_page);
 	let alias = unsafe { ALIAS.get().unwrap() };
@@ -53,13 +60,14 @@ async fn get_page(page: String) -> Result<RawText<String>, Redirect> {
 	for i in alias {
 		if i.uri == decoded_page {
 			return match i.is_url {
-				Some(true) => Err(Redirect::to(i.alias.clone())),
-				_ => Ok(RawText(smurf::io::read_file_to_str(&PathBuf::from(&i.alias)).unwrap())),
+				Some(true) => Response::Redirect(Redirect::to(i.alias.clone())),
+				_ => Response::Text(RawText(
+					smurf::io::read_file_to_str(&PathBuf::from(&i.alias)).unwrap(),
+				)),
 			};
 		}
 	}
-
-	Err(Redirect::to("/404"))
+	Response::Status(Status::NotFound)
 }
 
 #[get("/")]

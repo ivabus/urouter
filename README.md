@@ -23,9 +23,17 @@ Edit `alias.json` and `cargo run`
     "uri": "uri2",
     "alias": "http://example.com",
     "is_url": true
+  },
+  {
+    "uri": "/",
+    "alias": "https://somecoolscript.sh",
+    "is_url": true,
+    "curl_only": true
   }
 ]
 ```
+
+`"curl_only"` thing for `curl https://url | sh` like scripts.
 
 ## License
 

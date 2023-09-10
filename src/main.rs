@@ -29,11 +29,12 @@ use rocket::http::Status;
 use std::cell::OnceCell;
 use std::path::PathBuf;
 
+use rocket::request::{FromRequest, Outcome};
 use rocket::response::content::RawText;
 use rocket::response::{Redirect, Responder};
+use rocket::Request;
 use serde::Deserialize;
 
-const INDEX_REDIRECT: &'static str = "https://ivabus.dev";
 const _ALIAS: &'static str = include_str!("../alias.json");
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
 
@@ -42,6 +43,7 @@ struct Alias {
 	uri: String,
 	alias: String,
 	is_url: Option<bool>,
+	curl_only: Option<bool>,
 }
 
 #[derive(Responder)]
@@ -51,28 +53,61 @@ enum Response {
 	Status(Status),
 }
 
+struct UserAgent(String);
+
+#[derive(Debug)]
+enum UserAgentError {}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for UserAgent {
+	type Error = UserAgentError;
+
+	async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+		match req.headers().get_one("user-agent") {
+			Some(key) => Outcome::Success(UserAgent(key.to_string())),
+			_ => Outcome::Success(UserAgent("".to_string())),
+		}
+	}
+}
+
+fn get_return(alias: &Alias) -> Response {
+	return match alias.is_url {
+		Some(true) => Response::Redirect(Redirect::to(alias.alias.clone())),
+		_ => Response::Text(RawText(
+			smurf::io::read_file_to_str(&PathBuf::from(&alias.alias)).unwrap(),
+		)),
+	};
+}
+
 #[get("/<page>")]
-async fn get_page(page: String) -> Response {
+fn get_page(page: String, user_agent: UserAgent) -> Response {
 	let mut decoded_page = String::new();
 	url_escape::decode_to_string(page, &mut decoded_page);
 	let alias = unsafe { ALIAS.get().unwrap() };
-
+	let mut pages = Vec::new();
+	let curl_check = user_agent.0.contains("curl");
 	for i in alias {
 		if i.uri == decoded_page {
-			return match i.is_url {
-				Some(true) => Response::Redirect(Redirect::to(i.alias.clone())),
-				_ => Response::Text(RawText(
-					smurf::io::read_file_to_str(&PathBuf::from(&i.alias)).unwrap(),
-				)),
+			if (i.curl_only == Some(true) && curl_check.clone())
+				|| (i.curl_only != Some(true) && !curl_check.clone())
+			{
+				return get_return(i);
 			};
+			pages.push(i);
+		}
+	}
+	// Returning normal page (if  found) to curl users.
+	for i in pages {
+		if i.curl_only != Some(true) {
+			return get_return(i);
 		}
 	}
 	Response::Status(Status::NotFound)
 }
 
 #[get("/")]
-async fn get_index() -> Redirect {
-	Redirect::to(INDEX_REDIRECT)
+async fn index(user_agent: UserAgent) -> Response {
+	get_page("/".to_string(), user_agent)
 }
 
 #[rocket::main]
@@ -80,6 +115,6 @@ async fn main() -> Result<(), rocket::Error> {
 	unsafe {
 		ALIAS.set(serde_json::from_str(_ALIAS).unwrap()).unwrap_unchecked();
 	}
-	let _rocket = rocket::build().mount("/", routes![get_page, get_index]).launch().await?;
+	let _rocket = rocket::build().mount("/", routes![get_page, index]).launch().await?;
 	Ok(())
 }

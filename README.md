@@ -1,6 +1,6 @@
 # urouter 
 
-Fork of [ivabus/aliurl](https://github.com/ivabus/aliurl) that routes statically.
+Static (list of routes precompiled) http router for routing small domains.
 
 ## Installation
 

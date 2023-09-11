@@ -37,4 +37,4 @@ Edit `alias.json` and `cargo run`
 
 ## License
 
-The project is licensed under the terms of the [MIT license](./LICENSE).%
+The project is licensed under the terms of the [MIT license](./LICENSE).

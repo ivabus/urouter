@@ -73,9 +73,9 @@ impl<'r> FromRequest<'r> for UserAgent {
 fn get_return(alias: &Alias) -> Response {
 	return match alias.is_url {
 		Some(true) => Response::Redirect(Redirect::to(alias.alias.clone())),
-		_ => Response::Text(RawText(
-			smurf::io::read_file_to_str(&PathBuf::from(&alias.alias)).unwrap(),
-		)),
+		_ => {
+			Response::Text(RawText(smurf::io::read_file_str(&PathBuf::from(&alias.alias)).unwrap()))
+		}
 	};
 }
 

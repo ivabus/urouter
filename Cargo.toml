@@ -1,6 +1,6 @@
 [package]
 name = "urouter"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/ivabus/urouter"
@@ -12,4 +12,4 @@ rocket = "0.5.0-rc.3"
 serde = { version = "1.0.163", features = ["derive"] }
 serde_json = "1.0.96"
 url-escape = "0.1.1"
-smurf = "0.2.0"
+smurf = "0.3.0"

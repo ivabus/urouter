@@ -27,6 +27,7 @@ extern crate rocket;
 
 use rocket::http::Status;
 use std::cell::OnceCell;
+use std::net::IpAddr;
 use std::path::PathBuf;
 
 use rocket::request::{FromRequest, Outcome};
@@ -36,14 +37,21 @@ use rocket::Request;
 use serde::Deserialize;
 
 use clap::Parser;
+use rocket::figment::Figment;
 
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
 
 #[derive(Parser, Debug)]
 #[command(about, author)]
 struct Args {
-	#[arg(short, long, default_value = "./alias.json")]
+	#[arg(long, default_value = "./alias.json")]
 	alias_file: PathBuf,
+
+	#[arg(short, long, default_value = "127.0.0.1")]
+	address: IpAddr,
+
+	#[arg(short, long, default_value = "8080")]
+	port: u16,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -128,6 +136,12 @@ async fn main() -> Result<(), rocket::Error> {
 			)
 			.unwrap();
 	}
-	let _rocket = rocket::build().mount("/", routes![get_page, index]).launch().await?;
+
+	let figment = Figment::from(rocket::Config::default())
+		.merge(("ident", "urouter"))
+		.merge(("port", args.port))
+		.merge(("address", args.address));
+
+	let _rocket = rocket::custom(figment).mount("/", routes![get_page, index]).launch().await?;
 	Ok(())
 }

@@ -1,6 +1,6 @@
 # urouter 
 
-Static (list of routes precompiled) http router for routing small domains.
+Static (list of routes read once) http router for routing small domains.
 
 ## Installation
 
@@ -9,7 +9,7 @@ git clone https://github.com/ivabus/urouter
 cd urouter
 ```
 
-Edit `alias.json` and `cargo run`
+Edit `alias.json` (or any other JSON file, check `--alias-file` option) and `cargo run`
 
 ## `alias.json` example
 

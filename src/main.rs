@@ -35,10 +35,18 @@ use rocket::response::{Redirect, Responder};
 use rocket::Request;
 use serde::Deserialize;
 
-const _ALIAS: &'static str = include_str!("../alias.json");
+use clap::Parser;
+
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
 
-#[derive(Deserialize, Clone)]
+#[derive(Parser, Debug)]
+#[command(about, author)]
+struct Args {
+	#[arg(short, long, default_value = "./alias.json")]
+	alias_file: PathBuf,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 struct Alias {
 	uri: String,
 	alias: String,
@@ -112,8 +120,13 @@ async fn index(user_agent: UserAgent) -> Response {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
+	let args = Args::parse();
 	unsafe {
-		ALIAS.set(serde_json::from_str(_ALIAS).unwrap()).unwrap_unchecked();
+		ALIAS
+			.set(
+				serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap(),
+			)
+			.unwrap();
 	}
 	let _rocket = rocket::build().mount("/", routes![get_page, index]).launch().await?;
 	Ok(())

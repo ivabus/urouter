@@ -47,6 +47,10 @@ struct Args {
 	#[arg(long, default_value = "./alias.json")]
 	alias_file: PathBuf,
 
+	/// For internal usage
+	#[arg(long, default_value = "false")]
+	alias_file_is_set_not_a_list: bool,
+
 	/// Dir to lookup file alias
 	#[arg(long, default_value = ".")]
 	dir: PathBuf,
@@ -56,6 +60,12 @@ struct Args {
 
 	#[arg(short, long, default_value = "8080")]
 	port: u16,
+}
+
+// For better compatability with Nix (with set on the top of alias.json instead of a list)
+#[derive(Deserialize, Clone, Debug)]
+struct NixJson {
+	alias: Vec<Alias>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -136,12 +146,15 @@ async fn index(user_agent: UserAgent) -> Response {
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
 	let args = Args::parse();
+	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
+		let set: NixJson =
+			serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap();
+		set.alias
+	} else {
+		serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap()
+	};
 	unsafe {
-		ALIAS
-			.set(
-				serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap(),
-			)
-			.unwrap();
+		ALIAS.set(alias).unwrap();
 	}
 
 	let figment = Figment::from(rocket::Config::default())

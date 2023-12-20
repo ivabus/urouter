@@ -47,6 +47,10 @@ struct Args {
 	#[arg(long, default_value = "./alias.json")]
 	alias_file: PathBuf,
 
+	/// Dir to lookup file alias
+	#[arg(long, default_value = ".")]
+	dir: PathBuf,
+
 	#[arg(short, long, default_value = "127.0.0.1")]
 	address: IpAddr,
 
@@ -87,10 +91,13 @@ impl<'r> FromRequest<'r> for UserAgent {
 }
 
 fn get_return(alias: &Alias) -> Response {
+	let args = Args::parse();
+	let mut dir = args.dir.clone();
 	return match alias.is_url {
 		Some(true) => Response::Redirect(Redirect::to(alias.alias.clone())),
 		_ => {
-			Response::Text(RawText(smurf::io::read_file_str(&PathBuf::from(&alias.alias)).unwrap()))
+			dir.push(&PathBuf::from(&alias.alias));
+			Response::Text(RawText(smurf::io::read_file_str(&dir).unwrap()))
 		}
 	};
 }

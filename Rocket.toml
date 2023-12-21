@@ -1,9 +1,0 @@
-[default]
-address = "127.0.0.1"
-port = 8080
-keep_alive = 0
-ident = "urouter"
-ip_header = false
-log_level = "normal"
-temp_dir = "/tmp"
-cli_colors = true

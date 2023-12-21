@@ -22,93 +22,26 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+mod structs;
+
+use structs::*;
 #[macro_use]
 extern crate rocket;
 
 use rocket::http::Status;
-use std::cell::OnceCell;
-use std::ffi::OsStr;
-use std::net::IpAddr;
+use std::cell::{OnceCell, RefCell};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-use rocket::request::{FromRequest, Outcome};
 use rocket::response::content::RawText;
-use rocket::response::{Redirect, Responder};
-use rocket::Request;
-use serde::Deserialize;
+use rocket::response::Redirect;
 
 use clap::Parser;
+use regex::Regex;
 use rocket::figment::Figment;
 
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
-
-#[derive(Parser, Debug)]
-#[command(about, author)]
-struct Args {
-	#[arg(long, default_value = "./alias.json")]
-	alias_file: PathBuf,
-
-	/// For internal usage
-	#[arg(long, default_value = "false")]
-	alias_file_is_set_not_a_list: bool,
-
-	/// Dir to lookup file alias
-	#[arg(long, default_value = ".")]
-	dir: PathBuf,
-
-	#[arg(short, long, default_value = "127.0.0.1")]
-	address: IpAddr,
-
-	#[arg(short, long, default_value = "8080")]
-	port: u16,
-}
-
-// For better compatability with Nix (with set on the top of alias.json instead of a list)
-#[derive(Deserialize, Clone, Debug)]
-struct NixJson {
-	alias: Vec<Alias>,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-struct Alias {
-	uri: String,
-	alias: AliasType,
-	curl_only: Option<bool>,
-}
-
-#[derive(Deserialize, Clone, Debug)]
-enum AliasType {
-	#[serde(alias = "url")]
-	Url(String),
-	#[serde(alias = "file")]
-	File(String),
-	#[serde(alias = "text")]
-	Text(String),
-}
-
-#[derive(Responder)]
-enum Response {
-	Text(RawText<String>),
-	Redirect(Redirect),
-	Status(Status),
-}
-
-struct UserAgent(String);
-
-#[derive(Debug)]
-enum UserAgentError {}
-
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for UserAgent {
-	type Error = UserAgentError;
-
-	async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-		match req.headers().get_one("user-agent") {
-			Some(key) => Outcome::Success(UserAgent(key.to_string())),
-			_ => Outcome::Success(UserAgent("".to_string())),
-		}
-	}
-}
+static mut COMPILED_REGEXES: RefCell<Option<HashMap<String, Regex>>> = RefCell::new(None);
 
 fn get_return(alias: &Alias) -> Response {
 	let args = Args::parse();
@@ -129,20 +62,40 @@ fn get_page(page: String, user_agent: UserAgent) -> Response {
 	url_escape::decode_to_string(page, &mut decoded_page);
 	let alias = unsafe { ALIAS.get().unwrap() };
 	let mut pages = Vec::new();
-	let curl_check = user_agent.0.contains("curl");
 	for i in alias {
 		if i.uri == decoded_page {
-			if (i.curl_only == Some(true)) == curl_check.clone() {
-				return get_return(i);
-			};
+			match &i.agent {
+				Some(agent) => unsafe {
+					let re = if let Some(regexes) = COMPILED_REGEXES.get_mut() {
+						match regexes.get(&agent.regex) {
+							Some(re) => re.clone(),
+							None => {
+								let re = Regex::new(&agent.regex).unwrap();
+								regexes.insert(agent.regex.clone(), re.clone());
+								re.clone()
+							}
+						}
+					} else {
+						// guaranteed to be initialized at the beginning
+						unreachable!()
+					};
+
+					if re.is_match(&user_agent.0) {
+						return get_return(&i);
+					}
+
+					if let Some(true) = agent.only_matching {
+						continue;
+					}
+				},
+				_ => {}
+			}
 			pages.push(i);
 		}
 	}
 	// Returning normal page (if  found) to curl users.
-	for i in pages {
-		if i.curl_only != Some(true) {
-			return get_return(i);
-		}
+	if pages.len() != 0 {
+		return get_return(pages[0]);
 	}
 	Response::Status(Status::NotFound)
 }
@@ -164,6 +117,7 @@ async fn main() -> Result<(), rocket::Error> {
 	};
 	unsafe {
 		ALIAS.set(alias).unwrap();
+		*COMPILED_REGEXES.get_mut() = Some(HashMap::new());
 	}
 
 	let figment = Figment::from(rocket::Config::default())

@@ -16,28 +16,31 @@ Edit `alias.json` (or any other JSON file, check `--alias-file` option) and `car
 ```json
 [
   {
-    "uri": "uri",
+    "uri":"/",
     "alias": {
-      "file":  "somefile"
+      "url":  "https://somecoolwebsite"
     }
   },
   {
-    "uri": "uri2",
+    "uri":"/",
     "alias": {
-      "url": "http://example.com"
-    }
-  },
-  {
-    "uri": "/",
-    "alias": {
-      "url": "https://somecoolscript.sh"
+      "file": "somecoolscript"
     },
-    "curl_only": true
+    "agent": {
+      "regex": "^curl/[0-9].[0-9].[0-9]$",
+      "only_matching": false
+    }
+  },
+  {
+    "uri":"/text",
+    "alias": {
+      "text": "sometext"
+    }
   }
 ]
 ```
 
-`"curl_only"` thing for `curl https://url | sh` like scripts.
+Agent matching made for `curl https://url | sh` like scripts.
 
 ## License
 

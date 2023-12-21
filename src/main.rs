@@ -27,6 +27,7 @@ extern crate rocket;
 
 use rocket::http::Status;
 use std::cell::OnceCell;
+use std::ffi::OsStr;
 use std::net::IpAddr;
 use std::path::PathBuf;
 
@@ -71,9 +72,18 @@ struct NixJson {
 #[derive(Deserialize, Clone, Debug)]
 struct Alias {
 	uri: String,
-	alias: String,
-	is_url: Option<bool>,
+	alias: AliasType,
 	curl_only: Option<bool>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+enum AliasType {
+	#[serde(alias = "url")]
+	Url(String),
+	#[serde(alias = "file")]
+	File(String),
+	#[serde(alias = "text")]
+	Text(String),
 }
 
 #[derive(Responder)]
@@ -103,12 +113,13 @@ impl<'r> FromRequest<'r> for UserAgent {
 fn get_return(alias: &Alias) -> Response {
 	let args = Args::parse();
 	let mut dir = args.dir.clone();
-	return match alias.is_url {
-		Some(true) => Response::Redirect(Redirect::to(alias.alias.clone())),
-		_ => {
-			dir.push(&PathBuf::from(&alias.alias));
+	return match &alias.alias {
+		AliasType::Url(url) => Response::Redirect(Redirect::to(url.clone())),
+		AliasType::File(path) => {
+			dir.push(&PathBuf::from(&path));
 			Response::Text(RawText(smurf::io::read_file_str(&dir).unwrap()))
 		}
+		AliasType::Text(text) => Response::Text(RawText(text.clone())),
 	};
 }
 
@@ -121,9 +132,7 @@ fn get_page(page: String, user_agent: UserAgent) -> Response {
 	let curl_check = user_agent.0.contains("curl");
 	for i in alias {
 		if i.uri == decoded_page {
-			if (i.curl_only == Some(true) && curl_check.clone())
-				|| (i.curl_only != Some(true) && !curl_check.clone())
-			{
+			if (i.curl_only == Some(true)) == curl_check.clone() {
 				return get_return(i);
 			};
 			pages.push(i);

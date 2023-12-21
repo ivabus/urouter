@@ -17,17 +17,21 @@ Edit `alias.json` (or any other JSON file, check `--alias-file` option) and `car
 [
   {
     "uri": "uri",
-    "alias": "file"
+    "alias": {
+      "file":  "somefile"
+    }
   },
   {
     "uri": "uri2",
-    "alias": "http://example.com",
-    "is_url": true
+    "alias": {
+      "url": "http://example.com"
+    }
   },
   {
     "uri": "/",
-    "alias": "https://somecoolscript.sh",
-    "is_url": true,
+    "alias": {
+      "url": "https://somecoolscript.sh"
+    },
     "curl_only": true
   }
 ]

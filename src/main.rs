@@ -57,7 +57,7 @@ fn get_return(alias: &Alias) -> Response {
 }
 
 #[get("/<page>")]
-fn get_page(page: String, user_agent: UserAgent) -> Response {
+fn get_page(page: &str, user_agent: UserAgent) -> Response {
 	let mut decoded_page = String::new();
 	url_escape::decode_to_string(page, &mut decoded_page);
 	let alias = unsafe { ALIAS.get().unwrap() };
@@ -102,7 +102,7 @@ fn get_page(page: String, user_agent: UserAgent) -> Response {
 
 #[get("/")]
 async fn index(user_agent: UserAgent) -> Response {
-	get_page("/".to_string(), user_agent)
+	get_page("/", user_agent)
 }
 
 #[rocket::main]

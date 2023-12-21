@@ -1,0 +1,27 @@
+[
+  {
+    "uri":"/",
+    "alias": {
+      "url":  "https://ivabus.dev"
+    }
+  },
+  {
+    "uri":"/",
+    "alias": {
+      "file": "src/main.rs"
+    },
+    "agent": {
+      "regex": "^curl/[0-9].[0-9].[0-9]$"
+    }
+  },
+  {
+    "uri":"text",
+    "alias": {
+      "text": "sometext"
+    },
+    "agent": {
+      "regex": "^curl/[0-9].[0-9].[0-9]$",
+      "only_matching": true
+    }
+  }
+]

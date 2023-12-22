@@ -1,10 +1,13 @@
+/* SPDX-License-Identifier: MIT */
+
 use clap::Parser;
-use rocket::http::Status;
+use rocket::http::{ContentType, Status};
 use rocket::request::{FromRequest, Outcome};
 use rocket::response::content::RawText;
-use rocket::response::Redirect;
+use rocket::response::{Redirect, Responder};
 use rocket::Request;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 
@@ -50,6 +53,8 @@ pub enum AliasType {
 	File(String),
 	#[serde(alias = "text")]
 	Text(String),
+	#[serde(alias = "external")]
+	External(External),
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -58,11 +63,19 @@ pub struct Agent {
 	pub only_matching: Option<bool>,
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct External {
+	pub url: String,
+	#[serde(default)]
+	pub headers: HashMap<String, String>,
+}
+
 #[derive(Responder)]
 pub enum Response {
-	Text(RawText<String>),
+	Text(Box<RawText<String>>),
 	Redirect(Box<Redirect>),
 	Status(Status),
+	Custom(Box<(ContentType, RawText<String>)>),
 }
 
 pub struct UserAgent(pub String);

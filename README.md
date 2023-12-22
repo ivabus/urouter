@@ -16,18 +16,19 @@ JSON file with array of sets (or set with one field of arrays of sets with `--al
 
 Each set contains 2 necessary elements and 1 optional.
 
-- Necessary
-  - `uri` (string) - of url after host (e.g., `/`, `some/cool/path`, should not start with `/` (only for root))
-  - `alias` (set) - set of one field
-    - `url` (string) - redirect to url with HTTP 303 See Other
-    - `file` (string) - read file from path `--dir/file` where `--dir` is option (default: `.`, see `--help`) and respond with HTTP 200 OK with `content-type: text/plain`
-    - `text` (string) - plain text HTTP 200 OK with `content-type: text/plain`
-- Optional
-  - `agent` (set) - set of one necessary field and one optional
-    - `regex` (string) - regular expression to match user-agent HTTP header
-    - `only_matching` (bool, optional, false by default) - if false whole alias will be visible for any user agent, if true only for regex matched
+- `uri` (string) - of URL after host (e.g., `/`, `some/cool/path`, should not start with `/` (only for root))
+- `alias` (set) - set of one field
+  - `url` (string) - redirect to URL with HTTP 303 See Other
+  - `file` (string) - read file from path `--dir/file` where `--dir` is option (default: `.`, see `--help`) and respond with HTTP 200 OK with `content-type: text/plain`
+  - `text` (string) - plain text with HTTP 200 OK with `content-type: text/plain`
+  - `external` (set) - download (every time) file using `ureq` HTTP library and response with contents of downloaded resource with HTTP 200 OK and extracted `content-type` from response
+    - `url` (string) - URL to download
+    - `headers` (set, optional) - headers to include with request
+- `agent` (set, optional) - set of one necessary field and one optional
+  - `regex` (string) - regular expression to match user-agent HTTP header
+  - `only_matching` (bool, optional, false by default) - if false whole alias will be visible for any user agent, if true only for regex matched
 
-#### Set of array of sets
+#### Set of array of sets (use only for very specific workarounds)
 
 ```json
 {
@@ -66,6 +67,17 @@ Each set contains 2 necessary elements and 1 optional.
     "uri": "text",
     "alias": {
       "text": "sometext"
+    }
+  },
+  {
+    "uri": "external",
+    "alias": {
+      "external": {
+        "url": "https://somecool.external.link",
+        "headers": {
+          "user-agent": "curl/8.6.0"
+        }
+      }
     }
   }
 ]

@@ -1,26 +1,10 @@
+/* SPDX-License-Identifier: MIT */
+
 /*
- * MIT License
- *
- * Copyright (c) 2023 Ivan Bushchik
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- */
+Global comments:
+- I'm ok with unwrapping because if unwrap fails Rocket will automatically return
+  500 Internal Server Error
+*/
 
 mod structs;
 
@@ -28,8 +12,8 @@ use structs::*;
 #[macro_use]
 extern crate rocket;
 
-use rocket::http::Status;
-use std::cell::{OnceCell, RefCell};
+use rocket::http::{ContentType, Status};
+use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::hint::unreachable_unchecked;
 use std::path::PathBuf;
@@ -43,7 +27,7 @@ use regex::Regex;
 use rocket::figment::Figment;
 
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
-static mut COMPILED_REGEXES: RefCell<Option<HashMap<String, Regex>>> = RefCell::new(None);
+static mut COMPILED_REGEXES: OnceCell<HashMap<String, Regex>> = OnceCell::new();
 
 fn get_return(alias: &Alias) -> Response {
 	let args = Args::parse();
@@ -52,9 +36,21 @@ fn get_return(alias: &Alias) -> Response {
 		AliasType::Url(url) => Response::Redirect(Box::from(Redirect::to(url.clone()))),
 		AliasType::File(path) => {
 			dir.push(&PathBuf::from(&path));
-			Response::Text(RawText(smurf::io::read_file_str(&dir).unwrap()))
+			Response::Text(Box::new(RawText(smurf::io::read_file_str(&dir).unwrap())))
 		}
-		AliasType::Text(text) => Response::Text(RawText(text.clone())),
+		AliasType::Text(text) => Response::Text(Box::new(RawText(text.clone()))),
+		AliasType::External(source) => {
+			let mut request = ureq::get(&source.url);
+			for (header, value) in &source.headers {
+				request = request.set(header, value);
+			}
+			let result = request.call().unwrap();
+			let ct = result.content_type();
+			Response::Custom(Box::new((
+				ContentType::parse_flexible(ct).unwrap(),
+				RawText(result.into_string().unwrap()),
+			)))
+		}
 	}
 }
 
@@ -129,7 +125,7 @@ async fn main() -> Result<(), rocket::Error> {
 				(Instant::now() - compilation_start).as_secs_f64() * 1000.0
 			);
 		}
-		*COMPILED_REGEXES.get_mut() = Some(compiled_regexes);
+		COMPILED_REGEXES.set(compiled_regexes).unwrap();
 	}
 
 	let figment = Figment::from(rocket::Config::default())

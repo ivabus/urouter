@@ -31,7 +31,9 @@ extern crate rocket;
 use rocket::http::Status;
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
+use std::hint::unreachable_unchecked;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use rocket::response::content::RawText;
 use rocket::response::Redirect;
@@ -46,14 +48,14 @@ static mut COMPILED_REGEXES: RefCell<Option<HashMap<String, Regex>>> = RefCell::
 fn get_return(alias: &Alias) -> Response {
 	let args = Args::parse();
 	let mut dir = args.dir.clone();
-	return match &alias.alias {
-		AliasType::Url(url) => Response::Redirect(Redirect::to(url.clone())),
+	match &alias.alias {
+		AliasType::Url(url) => Response::Redirect(Box::from(Redirect::to(url.clone()))),
 		AliasType::File(path) => {
 			dir.push(&PathBuf::from(&path));
 			Response::Text(RawText(smurf::io::read_file_str(&dir).unwrap()))
 		}
 		AliasType::Text(text) => Response::Text(RawText(text.clone())),
-	};
+	}
 }
 
 #[get("/<page>")]
@@ -64,37 +66,30 @@ fn get_page(page: &str, user_agent: UserAgent) -> Response {
 	let mut pages = Vec::new();
 	for i in alias {
 		if i.uri == decoded_page {
-			match &i.agent {
-				Some(agent) => unsafe {
-					let re = if let Some(regexes) = COMPILED_REGEXES.get_mut() {
-						match regexes.get(&agent.regex) {
-							Some(re) => re.clone(),
-							None => {
-								let re = Regex::new(&agent.regex).unwrap();
-								regexes.insert(agent.regex.clone(), re.clone());
-								re.clone()
-							}
-						}
+			if let Some(agent) = &i.agent {
+				unsafe {
+					let regexes = COMPILED_REGEXES.get_mut();
+					let re = if let Some(r) = regexes {
+						// Unwrapping safely, guaranteed to be generated during initialization
+						r.get(&agent.regex).unwrap()
 					} else {
-						// guaranteed to be initialized at the beginning
-						unreachable!()
+						unreachable_unchecked()
 					};
 
 					if re.is_match(&user_agent.0) {
-						return get_return(&i);
+						return get_return(i);
 					}
 
 					if let Some(true) = agent.only_matching {
 						continue;
 					}
-				},
-				_ => {}
+				}
 			}
 			pages.push(i);
 		}
 	}
 	// Returning normal page (if  found) to curl users.
-	if pages.len() != 0 {
+	if !pages.is_empty() {
 		return get_return(pages[0]);
 	}
 	Response::Status(Status::NotFound)
@@ -108,20 +103,37 @@ async fn index(user_agent: UserAgent) -> Response {
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
 	let args = Args::parse();
+	let file = std::fs::File::open(args.alias_file).unwrap();
 	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
-		let set: NixJson =
-			serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap();
-		set.alias
+		serde_json::from_reader::<std::fs::File, NixJson>(file).unwrap().alias
 	} else {
-		serde_json::from_str(&smurf::io::read_file_str(&args.alias_file).unwrap()).unwrap()
+		serde_json::from_reader::<std::fs::File, Vec<Alias>>(file).unwrap()
 	};
 	unsafe {
 		ALIAS.set(alias).unwrap();
-		*COMPILED_REGEXES.get_mut() = Some(HashMap::new());
+
+		let compilation_start = Instant::now();
+		let mut regexes_len = 0;
+		// Precompile all regexes
+		let mut compiled_regexes: HashMap<String, Regex> = HashMap::new();
+		for i in ALIAS.get().unwrap() {
+			if let Some(agent) = &i.agent {
+				compiled_regexes.insert(agent.regex.clone(), Regex::new(&agent.regex).unwrap());
+				regexes_len += 1;
+			}
+		}
+		if regexes_len != 0 {
+			println!(
+				"Compiled {} regexes in {} ms",
+				regexes_len,
+				(Instant::now() - compilation_start).as_secs_f64() * 1000.0
+			);
+		}
+		*COMPILED_REGEXES.get_mut() = Some(compiled_regexes);
 	}
 
 	let figment = Figment::from(rocket::Config::default())
-		.merge(("ident", "urouter"))
+		.merge(("ident", format!("urouter/{}", env!("CARGO_PKG_VERSION"))))
 		.merge(("port", args.port))
 		.merge(("address", args.address));
 

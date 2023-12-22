@@ -61,7 +61,7 @@ pub struct Agent {
 #[derive(Responder)]
 pub enum Response {
 	Text(RawText<String>),
-	Redirect(Redirect),
+	Redirect(Box<Redirect>),
 	Status(Status),
 }
 

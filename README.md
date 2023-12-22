@@ -20,8 +20,8 @@ Each set contains 2 necessary elements and 1 optional.
   - `uri` (string) - of url after host (e.g., `/`, `some/cool/path`, should not start with `/` (only for root))
   - `alias` (set) - set of one field
     - `url` (string) - redirect to url with HTTP 303 See Other
-    - `file` (string) - read file from path `--dir/file` where `--dir` is option (default: `.`, see `--help`) and respond with HTTP 200 OK `content-type: text/plain; charset=utf-8`
-    - `text` (string) - plain text
+    - `file` (string) - read file from path `--dir/file` where `--dir` is option (default: `.`, see `--help`) and respond with HTTP 200 OK with `content-type: text/plain`
+    - `text` (string) - plain text HTTP 200 OK with `content-type: text/plain`
 - Optional
   - `agent` (set) - set of one necessary field and one optional
     - `regex` (string) - regular expression to match user-agent HTTP header

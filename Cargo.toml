@@ -1,10 +1,10 @@
 [package]
 name = "urouter"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/ivabus/urouter"
-description = "Small router for (kinda) short domains (fork of ivabus/aliurl without REST API)"
+description = "Small HTTP router"
 
 
 [dependencies]

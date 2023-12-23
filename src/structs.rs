@@ -14,8 +14,8 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(about, author)]
 pub struct Args {
-	#[arg(long, default_value = "./alias.json")]
-	pub alias_file: PathBuf,
+	#[arg(long)]
+	pub alias_file: Option<PathBuf>,
 
 	/// For internal usage
 	#[arg(long, default_value = "false")]

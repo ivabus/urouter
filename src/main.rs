@@ -7,24 +7,23 @@ Global comments:
 */
 
 mod structs;
-
 use structs::*;
+
 #[macro_use]
 extern crate rocket;
 
 use rocket::http::{ContentType, Status};
-use std::cell::OnceCell;
-use std::collections::HashMap;
-use std::hint::unreachable_unchecked;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::{
+	cell::OnceCell, collections::HashMap, hint::unreachable_unchecked, path::PathBuf, time::Instant,
+};
 
-use rocket::response::content::RawText;
-use rocket::response::Redirect;
+use rocket::{
+	figment::Figment,
+	response::{content::RawText, Redirect},
+};
 
 use clap::Parser;
 use regex::Regex;
-use rocket::figment::Figment;
 
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
 static mut COMPILED_REGEXES: OnceCell<HashMap<String, Regex>> = OnceCell::new();
@@ -98,8 +97,26 @@ async fn index(user_agent: UserAgent) -> Response {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-	let args = Args::parse();
-	let file = std::fs::File::open(args.alias_file).unwrap();
+	let mut args = Args::parse();
+	args.alias_file = match args.alias_file {
+		Some(f) => Some(f),
+		None => Some(
+			match users::get_effective_uid() {
+				0 => "/etc/urouter/alias.json".to_string(),
+				_ => match std::env::var("XDG_CONFIG_HOME") {
+					Ok(config_home) => format!("{}/urouter/alias.json", config_home),
+					Err(_) => match std::env::var("HOME") {
+						Ok(home) => format!("{}/.config/urouter/alias.json", home),
+						Err(_) => {
+							panic!("Could not get config location, see README")
+						}
+					},
+				},
+			}
+			.into(),
+		),
+	};
+	let file = std::fs::File::open(args.alias_file.unwrap()).unwrap();
 	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
 		serde_json::from_reader::<std::fs::File, NixJson>(file).unwrap().alias
 	} else {

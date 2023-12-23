@@ -85,6 +85,14 @@ Each set contains 2 necessary elements and 1 optional.
 
 Agent matching made for `curl https://url | sh` like scripts.
 
+## `alias.json` location
+
+- Passed with `--alias_file`, will look up to this path, if file doesn't exist (or no access to it) will panic
+- If urouter started with privileges (EUID = 0), file would be `/etc/urouter/alias.json`
+- Otherwise if `XDG_CONFIG_HOME` is set, file would be `$XDG_CONFIG_HOME/urouter/alias.json`
+- Otherwise if `$HOME` is set, file would be `$HOME/.config/urouter/alias.json`
+- If not matched any, will panic and exit
+
 ## License
 
 The project is licensed under the terms of the [MIT license](./LICENSE).

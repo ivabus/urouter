@@ -13,6 +13,7 @@ use structs::*;
 extern crate rocket;
 
 use rocket::http::{ContentType, Status};
+use std::io::Write;
 use std::{
 	cell::OnceCell, collections::HashMap, hint::unreachable_unchecked, path::PathBuf, time::Instant,
 };
@@ -24,6 +25,7 @@ use rocket::{
 
 use clap::Parser;
 use regex::Regex;
+use rocket::response::content::RawHtml;
 
 static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
 static mut COMPILED_REGEXES: OnceCell<HashMap<String, Regex>> = OnceCell::new();
@@ -38,6 +40,7 @@ fn get_return(alias: &Alias) -> Response {
 			Response::Text(Box::new(RawText(smurf::io::read_file_str(&dir).unwrap())))
 		}
 		AliasType::Text(text) => Response::Text(Box::new(RawText(text.clone()))),
+		AliasType::Html(html) => Response::Html(Box::new(RawHtml(html.clone()))),
 		AliasType::External(source) => {
 			let mut request = ureq::get(&source.url);
 			for (header, value) in &source.headers {
@@ -95,27 +98,34 @@ async fn index(user_agent: UserAgent) -> Response {
 	get_page("/", user_agent)
 }
 
+fn get_config_file_location() -> PathBuf {
+	if users::get_effective_uid() == 0 {
+		return "/etc/urouter/alias.json".parse().unwrap();
+	}
+
+	if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
+		return format!("{}/urouter/alias.json", config_home).parse().unwrap();
+	}
+
+	if let Ok(home) = std::env::var("HOME") {
+		return format!("{}/.config/urouter/alias.json", home).parse().unwrap();
+	}
+
+	if !std::path::Path::new("alias.json").exists() {
+		let mut file = std::fs::File::create("alias.json").unwrap();
+		file.write_all(b"[]").unwrap();
+	}
+	"alias.json".parse().unwrap()
+}
+
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
 	let mut args = Args::parse();
-	args.alias_file = match args.alias_file {
-		Some(f) => Some(f),
-		None => Some(
-			match users::get_effective_uid() {
-				0 => "/etc/urouter/alias.json".to_string(),
-				_ => match std::env::var("XDG_CONFIG_HOME") {
-					Ok(config_home) => format!("{}/urouter/alias.json", config_home),
-					Err(_) => match std::env::var("HOME") {
-						Ok(home) => format!("{}/.config/urouter/alias.json", home),
-						Err(_) => {
-							panic!("Could not get config location, see README")
-						}
-					},
-				},
-			}
-			.into(),
-		),
-	};
+
+	if args.alias_file.is_none() {
+		args.alias_file = Some(get_config_file_location());
+	}
+
 	let file = std::fs::File::open(args.alias_file.unwrap()).unwrap();
 	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
 		serde_json::from_reader::<std::fs::File, NixJson>(file).unwrap().alias

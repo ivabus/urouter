@@ -3,7 +3,7 @@
 use clap::Parser;
 use rocket::http::{ContentType, Status};
 use rocket::request::{FromRequest, Outcome};
-use rocket::response::content::RawText;
+use rocket::response::content::{RawHtml, RawText};
 use rocket::response::{Redirect, Responder};
 use rocket::Request;
 use serde::Deserialize;
@@ -53,6 +53,8 @@ pub enum AliasType {
 	File(String),
 	#[serde(alias = "text")]
 	Text(String),
+	#[serde(alias = "html")]
+	Html(String),
 	#[serde(alias = "external")]
 	External(External),
 }
@@ -73,6 +75,7 @@ pub struct External {
 #[derive(Responder)]
 pub enum Response {
 	Text(Box<RawText<String>>),
+	Html(Box<RawHtml<String>>),
 	Redirect(Box<Redirect>),
 	Status(Status),
 	Custom(Box<(ContentType, RawText<String>)>),

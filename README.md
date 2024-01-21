@@ -21,6 +21,7 @@ Each set contains 2 necessary elements and 1 optional.
   - `url` (string) - redirect to URL with HTTP 303 See Other
   - `file` (string) - read file from path `--dir/file` where `--dir` is option (default: `.`, see `--help`) and respond with HTTP 200 OK with `content-type: text/plain`
   - `text` (string) - plain text with HTTP 200 OK with `content-type: text/plain`
+  - `html` (string) - plain text with HTTP 200 OK with `content-type: text/html`
   - `external` (set) - download (every time) file using `ureq` HTTP library and response with contents of downloaded resource with HTTP 200 OK and extracted `content-type` from response
     - `url` (string) - URL to download
     - `headers` (set, optional) - headers to include with request

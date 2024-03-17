@@ -6,29 +6,62 @@ Global comments:
   500 Internal Server Error
 */
 
+#![forbid(unsafe_code)]
+
 mod structs;
 use structs::*;
 
 #[macro_use]
 extern crate rocket;
 
-use rocket::http::{ContentType, Status};
 use std::io::Write;
-use std::{
-	cell::OnceCell, collections::HashMap, hint::unreachable_unchecked, path::PathBuf, time::Instant,
-};
+use std::sync::Arc;
+use std::{collections::HashMap, path::PathBuf, time::Instant};
 
+use rocket::http::{ContentType, Status};
 use rocket::{
 	figment::Figment,
-	response::{content::RawText, Redirect},
+	response::{content::RawHtml, content::RawText, Redirect},
 };
 
 use clap::Parser;
+use once_cell::sync::Lazy;
 use regex::Regex;
-use rocket::response::content::RawHtml;
 
-static mut ALIAS: OnceCell<Vec<Alias>> = OnceCell::new();
-static mut COMPILED_REGEXES: OnceCell<HashMap<String, Regex>> = OnceCell::new();
+static ALIAS: Lazy<Arc<Vec<Alias>>> = Lazy::new(|| {
+	let mut args = Args::parse();
+	if args.alias_file.is_none() {
+		args.alias_file = Some(get_config_file_location());
+	}
+
+	let file = std::fs::File::open(args.alias_file.unwrap()).unwrap();
+	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
+		serde_json::from_reader::<std::fs::File, NixJson>(file).unwrap().alias
+	} else {
+		serde_json::from_reader::<std::fs::File, Vec<Alias>>(file).unwrap()
+	};
+	Arc::new(alias)
+});
+static COMPILED_REGEXES: Lazy<Arc<HashMap<String, Regex>>> = Lazy::new(|| {
+	let compilation_start = Instant::now();
+	let mut regexes_len = 0;
+	// Precompile all regexes
+	let mut compiled_regexes: HashMap<String, Regex> = HashMap::new();
+	for i in &**ALIAS {
+		if let Some(agent) = &i.agent {
+			compiled_regexes.insert(agent.regex.clone(), Regex::new(&agent.regex).unwrap());
+			regexes_len += 1;
+		}
+	}
+	if regexes_len != 0 {
+		println!(
+			"Compiled {} regexes in {} ms",
+			regexes_len,
+			(Instant::now() - compilation_start).as_secs_f64() * 1000.0
+		);
+	}
+	Arc::new(compiled_regexes)
+});
 
 fn get_return(alias: &Alias) -> Response {
 	let args = Args::parse();
@@ -37,7 +70,7 @@ fn get_return(alias: &Alias) -> Response {
 		AliasType::Url(url) => Response::Redirect(Box::from(Redirect::to(url.clone()))),
 		AliasType::File(path) => {
 			dir.push(&PathBuf::from(&path));
-			Response::Text(Box::new(RawText(smurf::io::read_file_str(&dir).unwrap())))
+			Response::Text(Box::new(RawText(std::fs::read_to_string(&dir).unwrap())))
 		}
 		AliasType::Text(text) => Response::Text(Box::new(RawText(text.clone()))),
 		AliasType::Html(html) => Response::Html(Box::new(RawHtml(html.clone()))),
@@ -60,29 +93,22 @@ fn get_return(alias: &Alias) -> Response {
 fn get_page(page: &str, user_agent: UserAgent) -> Response {
 	let mut decoded_page = String::new();
 	url_escape::decode_to_string(page, &mut decoded_page);
-	let alias = unsafe { ALIAS.get().unwrap() };
 	let mut pages = Vec::new();
-	for i in alias {
+	for i in &**ALIAS {
 		if i.uri == decoded_page {
 			if let Some(agent) = &i.agent {
-				unsafe {
-					let regexes = COMPILED_REGEXES.get_mut();
-					let re = if let Some(r) = regexes {
-						// Unwrapping safely, guaranteed to be generated during initialization
-						r.get(&agent.regex).unwrap()
-					} else {
-						unreachable_unchecked()
-					};
+				let regexes = &COMPILED_REGEXES;
+				let re = regexes.get(&agent.regex).unwrap();
 
-					if re.is_match(&user_agent.0) {
-						return get_return(i);
-					}
+				if re.is_match(&user_agent.0) {
+					return get_return(i);
+				}
 
-					if let Some(true) = agent.only_matching {
-						continue;
-					}
+				if let Some(true) = agent.only_matching {
+					continue;
 				}
 			}
+
 			pages.push(i);
 		}
 	}
@@ -120,40 +146,9 @@ fn get_config_file_location() -> PathBuf {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-	let mut args = Args::parse();
-
-	if args.alias_file.is_none() {
-		args.alias_file = Some(get_config_file_location());
-	}
-
-	let file = std::fs::File::open(args.alias_file.unwrap()).unwrap();
-	let alias: Vec<Alias> = if args.alias_file_is_set_not_a_list {
-		serde_json::from_reader::<std::fs::File, NixJson>(file).unwrap().alias
-	} else {
-		serde_json::from_reader::<std::fs::File, Vec<Alias>>(file).unwrap()
-	};
-	unsafe {
-		ALIAS.set(alias).unwrap();
-
-		let compilation_start = Instant::now();
-		let mut regexes_len = 0;
-		// Precompile all regexes
-		let mut compiled_regexes: HashMap<String, Regex> = HashMap::new();
-		for i in ALIAS.get().unwrap() {
-			if let Some(agent) = &i.agent {
-				compiled_regexes.insert(agent.regex.clone(), Regex::new(&agent.regex).unwrap());
-				regexes_len += 1;
-			}
-		}
-		if regexes_len != 0 {
-			println!(
-				"Compiled {} regexes in {} ms",
-				regexes_len,
-				(Instant::now() - compilation_start).as_secs_f64() * 1000.0
-			);
-		}
-		COMPILED_REGEXES.set(compiled_regexes).unwrap();
-	}
+	let args = Args::parse();
+	let _alias = &**ALIAS;
+	let _regex = &**COMPILED_REGEXES;
 
 	let figment = Figment::from(rocket::Config::default())
 		.merge(("ident", format!("urouter/{}", env!("CARGO_PKG_VERSION"))))
